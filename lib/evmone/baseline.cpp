@@ -122,6 +122,38 @@ evmc_result baseline_execute([[maybe_unused]] evmc_vm* vm, const evmc_host_inter
             break;
         case OP_SAR:
             sar(state->stack);
+            break;
+
+        case OP_MLOAD:
+        {
+            const auto status_code = mload(*state);
+            if (status_code != EVMC_SUCCESS)
+            {
+                result.status_code = status_code;
+                goto exit;
+            }
+            break;
+        }
+        case OP_MSTORE:
+        {
+            const auto status_code = mstore(*state);
+            if (status_code != EVMC_SUCCESS)
+            {
+                result.status_code = status_code;
+                goto exit;
+            }
+            break;
+        }
+        case OP_MSTORE8:
+        {
+            const auto status_code = mstore8(*state);
+            if (status_code != EVMC_SUCCESS)
+            {
+                result.status_code = status_code;
+                goto exit;
+            }
+            break;
+        }
         }
     }
 
