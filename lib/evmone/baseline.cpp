@@ -181,6 +181,16 @@ evmc_result baseline_execute([[maybe_unused]] evmc_vm* vm, const evmc_host_inter
             sar(state->stack);
             break;
 
+        case OP_SHA3:
+        {
+            const auto status_code = sha3(*state);
+            if (status_code != EVMC_SUCCESS)
+            {
+                state->status = status_code;
+                goto exit;
+            }
+            break;
+        }
 
         case OP_POP:
             pop(state->stack);
