@@ -7,6 +7,11 @@
 
 namespace evmone
 {
+const instruction* op_undefined(const instruction*, execution_state& state) noexcept
+{
+    return state.exit(EVMC_UNDEFINED_INSTRUCTION);
+}
+
 namespace
 {
 template <void InstrFn(evm_stack&)>
@@ -563,11 +568,6 @@ const instruction* op_create2(const instruction* instr, execution_state& state) 
     if ((state.gas_left -= msg.gas - result.gas_left) < 0)
         return state.exit(EVMC_OUT_OF_GAS);
     return ++instr;
-}
-
-const instruction* op_undefined(const instruction*, execution_state& state) noexcept
-{
-    return state.exit(EVMC_UNDEFINED_INSTRUCTION);
 }
 
 const instruction* op_selfdestruct(const instruction*, execution_state& state) noexcept

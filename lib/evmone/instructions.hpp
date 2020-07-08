@@ -610,4 +610,9 @@ inline evmc_status_code log(ExecutionState& state, size_t num_topics) noexcept
     state.host.emit_log(state.msg->destination, data, s, topics.data(), num_topics);
     return EVMC_SUCCESS;
 }
+
+
+struct instruction;
+struct execution_state;
+const instruction* op_undefined(const instruction*, execution_state& state) noexcept;
 }  // namespace evmone
