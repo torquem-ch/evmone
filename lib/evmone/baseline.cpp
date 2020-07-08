@@ -23,9 +23,10 @@ evmc_result baseline_execute([[maybe_unused]] evmc_vm* vm, const evmc_host_inter
 
     evmc_result result{};
 
-    for (size_t pc = 0; pc != code_size; ++pc)
+    const auto code_end = code + code_size;
+    for (auto pc = code; pc != code_end; ++pc)
     {
-        const auto op = code[pc];
+        const auto op = *pc;
         const auto metrics = op_tbl[op];
 
         if ((state->gas_left -= metrics.gas_cost) < 0)
