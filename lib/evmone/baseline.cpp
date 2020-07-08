@@ -109,6 +109,375 @@ inline evmc_status_code op_sstore(ExecutionState& state) noexcept
 }
 
 
+template <evmc_call_kind kind>
+evmc_status_code op_call(BaselineExecutionState& state) noexcept
+{
+    auto gas = state.stack[0];
+    const auto dst = intx::be::trunc<evmc::address>(state.stack[1]);
+    auto value = state.stack[2];
+    auto input_offset = state.stack[3];
+    auto input_size = state.stack[4];
+    auto output_offset = state.stack[5];
+    auto output_size = state.stack[6];
+
+    state.stack.pop();
+    state.stack.pop();
+    state.stack.pop();
+    state.stack.pop();
+    state.stack.pop();
+    state.stack.pop();
+    state.stack[0] = 0;
+
+    if (!check_memory(state, input_offset, input_size))
+        return EVMC_OUT_OF_GAS;
+
+    if (!check_memory(state, output_offset, output_size))
+        return EVMC_OUT_OF_GAS;
+
+
+    auto msg = evmc_message{};
+    msg.kind = kind;
+    msg.flags = state.msg->flags;
+    msg.value = intx::be::store<evmc::uint256be>(value);
+
+    auto gas_left = state.gas_left;
+
+    auto cost = 0;
+    auto has_value = value != 0;
+
+    if (has_value)
+        cost += 9000;
+
+    if constexpr (kind == EVMC_CALL)
+    {
+        if (has_value && state.msg->flags & EVMC_STATIC)
+            return EVMC_STATIC_MODE_VIOLATION;
+
+        if (has_value || state.rev < EVMC_SPURIOUS_DRAGON)
+        {
+            if (!state.host.account_exists(dst))
+                cost += 25000;
+        }
+    }
+
+    if ((gas_left -= cost) < 0)
+        return EVMC_OUT_OF_GAS;
+
+    msg.gas = std::numeric_limits<int64_t>::max();
+    if (gas < msg.gas)
+        msg.gas = static_cast<int64_t>(gas);
+
+    if (state.rev >= EVMC_TANGERINE_WHISTLE)
+        msg.gas = std::min(msg.gas, gas_left - gas_left / 64);
+    else if (msg.gas > gas_left)
+        return EVMC_OUT_OF_GAS;
+
+    state.return_data.clear();
+
+    state.gas_left -= cost;
+    if (state.msg->depth >= 1024)
+    {
+        if (has_value)
+            state.gas_left += 2300;  // Return unused stipend.
+        if (state.gas_left < 0)
+            return EVMC_OUT_OF_GAS;
+        return EVMC_SUCCESS;
+    }
+
+    msg.destination = dst;
+    msg.sender = state.msg->destination;
+    msg.value = intx::be::store<evmc::uint256be>(value);
+
+    if (size_t(input_size) > 0)
+    {
+        msg.input_data = &state.memory[size_t(input_offset)];
+        msg.input_size = size_t(input_size);
+    }
+
+    msg.depth = state.msg->depth + 1;
+
+    if (has_value)
+    {
+        const auto balance =
+            intx::be::load<uint256>(state.host.get_balance(state.msg->destination));
+        if (balance < value)
+        {
+            state.gas_left += 2300;  // Return unused stipend.
+            if (state.gas_left < 0)
+                return EVMC_OUT_OF_GAS;
+            return EVMC_SUCCESS;
+        }
+
+        msg.gas += 2300;  // Add stipend.
+    }
+
+    auto result = state.host.call(msg);
+    state.return_data.assign(result.output_data, result.output_size);
+
+
+    state.stack[0] = result.status_code == EVMC_SUCCESS;
+
+    if (auto copy_size = std::min(size_t(output_size), result.output_size); copy_size > 0)
+        std::memcpy(&state.memory[size_t(output_offset)], result.output_data, copy_size);
+
+    auto gas_used = msg.gas - result.gas_left;
+
+    if (has_value)
+        gas_used -= 2300;
+
+    if ((state.gas_left -= gas_used) < 0)
+        return EVMC_OUT_OF_GAS;
+    return EVMC_SUCCESS;
+}
+
+evmc_status_code op_delegatecall(ExecutionState& state) noexcept
+{
+    auto gas = state.stack[0];
+    const auto dst = intx::be::trunc<evmc::address>(state.stack[1]);
+    auto input_offset = state.stack[2];
+    auto input_size = state.stack[3];
+    auto output_offset = state.stack[4];
+    auto output_size = state.stack[5];
+
+    state.stack.pop();
+    state.stack.pop();
+    state.stack.pop();
+    state.stack.pop();
+    state.stack.pop();
+    state.stack[0] = 0;
+
+    if (!check_memory(state, input_offset, input_size))
+        return EVMC_OUT_OF_GAS;
+
+    if (!check_memory(state, output_offset, output_size))
+        return EVMC_OUT_OF_GAS;
+
+    auto msg = evmc_message{};
+    msg.kind = EVMC_DELEGATECALL;
+
+    auto gas_left = state.gas_left;
+
+    // TEST: Gas saturation for big gas values.
+    msg.gas = std::numeric_limits<int64_t>::max();
+    if (gas < msg.gas)
+        msg.gas = static_cast<int64_t>(gas);
+
+    if (state.rev >= EVMC_TANGERINE_WHISTLE)
+        msg.gas = std::min(msg.gas, gas_left - gas_left / 64);
+    else if (msg.gas > gas_left)  // TEST: gas_left vs state.gas_left.
+        return EVMC_OUT_OF_GAS;
+
+    if (state.msg->depth >= 1024)
+        return EVMC_SUCCESS;
+
+    msg.depth = state.msg->depth + 1;
+    msg.flags = state.msg->flags;
+    msg.destination = dst;
+    msg.sender = state.msg->sender;
+    msg.value = state.msg->value;
+
+    if (size_t(input_size) > 0)
+    {
+        msg.input_data = &state.memory[size_t(input_offset)];
+        msg.input_size = size_t(input_size);
+    }
+
+    auto result = state.host.call(msg);
+    state.return_data.assign(result.output_data, result.output_size);
+
+    state.stack[0] = result.status_code == EVMC_SUCCESS;
+
+    if (const auto copy_size = std::min(size_t(output_size), result.output_size); copy_size > 0)
+        std::memcpy(&state.memory[size_t(output_offset)], result.output_data, copy_size);
+
+    auto gas_used = msg.gas - result.gas_left;
+
+    if ((state.gas_left -= gas_used) < 0)
+        return EVMC_OUT_OF_GAS;
+    return EVMC_SUCCESS;
+}
+
+evmc_status_code op_staticcall(BaselineExecutionState& state) noexcept
+{
+    auto gas = state.stack[0];
+    const auto dst = intx::be::trunc<evmc::address>(state.stack[1]);
+    auto input_offset = state.stack[2];
+    auto input_size = state.stack[3];
+    auto output_offset = state.stack[4];
+    auto output_size = state.stack[5];
+
+    state.stack.pop();
+    state.stack.pop();
+    state.stack.pop();
+    state.stack.pop();
+    state.stack.pop();
+    state.stack[0] = 0;
+
+    if (!check_memory(state, input_offset, input_size))
+        return EVMC_OUT_OF_GAS;
+
+    if (!check_memory(state, output_offset, output_size))
+        return EVMC_OUT_OF_GAS;
+
+    if (state.msg->depth >= 1024)
+        return EVMC_SUCCESS;
+
+    auto msg = evmc_message{};
+    msg.kind = EVMC_CALL;
+    msg.flags |= EVMC_STATIC;
+
+    msg.depth = state.msg->depth + 1;
+
+    auto gas_left = state.gas_left;
+
+    msg.gas = std::numeric_limits<int64_t>::max();
+    if (gas < msg.gas)
+        msg.gas = static_cast<int64_t>(gas);
+
+    msg.gas = std::min(msg.gas, gas_left - gas_left / 64);
+
+    msg.destination = dst;
+    msg.sender = state.msg->destination;
+
+    if (size_t(input_size) > 0)
+    {
+        msg.input_data = &state.memory[size_t(input_offset)];
+        msg.input_size = size_t(input_size);
+    }
+
+    auto result = state.host.call(msg);
+    state.return_data.assign(result.output_data, result.output_size);
+    state.stack[0] = result.status_code == EVMC_SUCCESS;
+
+    if (auto copy_size = std::min(size_t(output_size), result.output_size); copy_size > 0)
+        std::memcpy(&state.memory[size_t(output_offset)], result.output_data, copy_size);
+
+    auto gas_used = msg.gas - result.gas_left;
+
+    if ((state.gas_left -= gas_used) < 0)
+        return EVMC_OUT_OF_GAS;
+    return EVMC_SUCCESS;
+}
+
+evmc_status_code op_create(BaselineExecutionState& state) noexcept
+{
+    if (state.msg->flags & EVMC_STATIC)
+        return EVMC_STATIC_MODE_VIOLATION;
+
+    auto endowment = state.stack[0];
+    auto init_code_offset = state.stack[1];
+    auto init_code_size = state.stack[2];
+
+    state.stack.pop();
+    state.stack.pop();
+    state.stack[0] = 0;
+
+    if (!check_memory(state, init_code_offset, init_code_size))
+        return EVMC_OUT_OF_GAS;
+
+    state.return_data.clear();
+
+    if (state.msg->depth >= 1024)
+        return EVMC_SUCCESS;
+
+    if (endowment != 0)
+    {
+        const auto balance =
+            intx::be::load<uint256>(state.host.get_balance(state.msg->destination));
+        if (balance < endowment)
+            return EVMC_SUCCESS;
+    }
+
+    auto msg = evmc_message{};
+
+    msg.gas = state.gas_left;
+    if (state.rev >= EVMC_TANGERINE_WHISTLE)
+        msg.gas = msg.gas - msg.gas / 64;
+
+    msg.kind = EVMC_CREATE;
+
+    if (size_t(init_code_size) > 0)
+    {
+        msg.input_data = &state.memory[size_t(init_code_offset)];
+        msg.input_size = size_t(init_code_size);
+    }
+
+    msg.sender = state.msg->destination;
+    msg.depth = state.msg->depth + 1;
+    msg.value = intx::be::store<evmc::uint256be>(endowment);
+
+    auto result = state.host.call(msg);
+    state.return_data.assign(result.output_data, result.output_size);
+    if (result.status_code == EVMC_SUCCESS)
+        state.stack[0] = intx::be::load<uint256>(result.create_address);
+
+    if ((state.gas_left -= msg.gas - result.gas_left) < 0)
+        return EVMC_OUT_OF_GAS;
+    return EVMC_SUCCESS;
+}
+
+evmc_status_code op_create2(BaselineExecutionState& state) noexcept
+{
+    if (state.msg->flags & EVMC_STATIC)
+        return EVMC_STATIC_MODE_VIOLATION;
+
+    auto endowment = state.stack[0];
+    auto init_code_offset = state.stack[1];
+    auto init_code_size = state.stack[2];
+    auto salt = state.stack[3];
+
+    state.stack.pop();
+    state.stack.pop();
+    state.stack.pop();
+    state.stack[0] = 0;
+
+    if (!check_memory(state, init_code_offset, init_code_size))
+        return EVMC_OUT_OF_GAS;
+
+    auto salt_cost = num_words(static_cast<size_t>(init_code_size)) * 6;
+    state.gas_left -= salt_cost;
+    if (state.gas_left < 0)
+        return EVMC_OUT_OF_GAS;
+
+    state.return_data.clear();
+
+    if (state.msg->depth >= 1024)
+        return EVMC_SUCCESS;
+
+    if (endowment != 0)
+    {
+        const auto balance =
+            intx::be::load<uint256>(state.host.get_balance(state.msg->destination));
+        if (balance < endowment)
+            return EVMC_SUCCESS;
+    }
+
+    auto msg = evmc_message{};
+
+    auto gas = state.gas_left;
+    msg.gas = gas - gas / 64;
+
+    msg.kind = EVMC_CREATE2;
+    if (size_t(init_code_size) > 0)
+    {
+        msg.input_data = &state.memory[size_t(init_code_offset)];
+        msg.input_size = size_t(init_code_size);
+    }
+    msg.sender = state.msg->destination;
+    msg.depth = state.msg->depth + 1;
+    msg.create2_salt = intx::be::store<evmc::bytes32>(salt);
+    msg.value = intx::be::store<evmc::uint256be>(endowment);
+
+    auto result = state.host.call(msg);
+    state.return_data.assign(result.output_data, result.output_size);
+    if (result.status_code == EVMC_SUCCESS)
+        state.stack[0] = intx::be::load<uint256>(result.create_address);
+
+    if ((state.gas_left -= msg.gas - result.gas_left) < 0)
+        return EVMC_OUT_OF_GAS;
+    return EVMC_SUCCESS;
+}
+
 template <evmc_status_code status_code>
 inline void op_return(BaselineExecutionState& state) noexcept
 {
@@ -125,6 +494,31 @@ inline void op_return(BaselineExecutionState& state) noexcept
     if (state.output_size != 0)
         state.output_offset = static_cast<size_t>(offset);
     state.status = status_code;
+}
+
+evmc_status_code op_selfdestruct(BaselineExecutionState& state) noexcept
+{
+    if (state.msg->flags & EVMC_STATIC)
+        return EVMC_STATIC_MODE_VIOLATION;
+
+    const auto addr = intx::be::trunc<evmc::address>(state.stack[0]);
+
+    if (state.rev >= EVMC_TANGERINE_WHISTLE)
+    {
+        if (state.rev == EVMC_TANGERINE_WHISTLE || state.host.get_balance(state.msg->destination))
+        {
+            // After TANGERINE_WHISTLE apply additional cost of
+            // sending value to a non-existing account.
+            if (!state.host.account_exists(addr))
+            {
+                if ((state.gas_left -= 25000) < 0)
+                    return EVMC_OUT_OF_GAS;
+            }
+        }
+    }
+
+    state.host.selfdestruct(state.msg->destination, addr);
+    return EVMC_SUCCESS;
 }
 }  // namespace
 
@@ -688,14 +1082,81 @@ evmc_result baseline_execute([[maybe_unused]] evmc_vm* vm, const evmc_host_inter
             break;
         }
 
+        case OP_CREATE:
+        {
+            const auto status_code = op_create(*state);
+            if (status_code != EVMC_SUCCESS)
+            {
+                state->status = status_code;
+                goto exit;
+            }
+            break;
+        }
+        case OP_CALL:
+        {
+            const auto status_code = op_call<EVMC_CALL>(*state);
+            if (status_code != EVMC_SUCCESS)
+            {
+                state->status = status_code;
+                goto exit;
+            }
+            break;
+        }
+        case OP_CALLCODE:
+        {
+            const auto status_code = op_call<EVMC_CALLCODE>(*state);
+            if (status_code != EVMC_SUCCESS)
+            {
+                state->status = status_code;
+                goto exit;
+            }
+            break;
+        }
         case OP_RETURN:
             op_return<EVMC_SUCCESS>(*state);
             goto exit;
+        case OP_DELEGATECALL:
+        {
+            const auto status_code = op_delegatecall(*state);
+            if (status_code != EVMC_SUCCESS)
+            {
+                state->status = status_code;
+                goto exit;
+            }
+            break;
+        }
+        case OP_STATICCALL:
+        {
+            const auto status_code = op_staticcall(*state);
+            if (status_code != EVMC_SUCCESS)
+            {
+                state->status = status_code;
+                goto exit;
+            }
+            break;
+        }
+        case OP_CREATE2:
+        {
+            const auto status_code = op_create2(*state);
+            if (status_code != EVMC_SUCCESS)
+            {
+                state->status = status_code;
+                goto exit;
+            }
+            break;
+        }
         case OP_REVERT:
             op_return<EVMC_REVERT>(*state);
             goto exit;
         case OP_INVALID:
             state->status = EVMC_INVALID_INSTRUCTION;
+            goto exit;
+        case OP_SELFDESTRUCT:
+            state->status = op_selfdestruct(*state);
+            goto exit;
+        default:
+            // TODO: Should not happen.
+            state->status = EVMC_INTERNAL_ERROR;
             goto exit;
         }
     }
