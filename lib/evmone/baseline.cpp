@@ -70,6 +70,12 @@ evmc_result baseline_execute([[maybe_unused]] evmc_vm* vm, const evmc_host_inter
         const auto op = *pc;
         const auto metrics = op_tbl[op];
 
+        if (metrics.fn == op_undefined)
+        {
+            state->status = EVMC_UNDEFINED_INSTRUCTION;
+            break;
+        }
+
         if ((state->gas_left -= metrics.gas_cost) < 0)
         {
             state->status = EVMC_OUT_OF_GAS;
