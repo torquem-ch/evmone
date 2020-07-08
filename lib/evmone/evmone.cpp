@@ -6,12 +6,15 @@
 /// EVMC instance and entry point of evmone is defined here.
 /// The file name matches the evmone.h public header.
 
+#include "baseline.hpp"
 #include "execution.hpp"
 #include <evmone/evmone.h>
 
 extern "C" {
 EVMC_EXPORT evmc_vm* evmc_create_evmone() noexcept
 {
+    constexpr auto use_baseline = true;
+
     static constexpr auto destroy = [](evmc_vm*) noexcept {};
     static constexpr auto get_capabilities = [](evmc_vm*) noexcept
     {
@@ -23,7 +26,7 @@ EVMC_EXPORT evmc_vm* evmc_create_evmone() noexcept
         "evmone",
         PROJECT_VERSION,
         destroy,
-        evmone::execute,
+        use_baseline ? evmone::baseline_execute : evmone::execute,
         get_capabilities,
         /* set_option(): */ nullptr,
     };
