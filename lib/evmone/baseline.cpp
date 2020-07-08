@@ -205,6 +205,19 @@ evmc_result baseline_execute([[maybe_unused]] evmc_vm* vm, const evmc_host_inter
             }
             break;
         }
+
+        case OP_PC:
+            state->stack.push(pc - code);
+            break;
+        case OP_MSIZE:
+            state->stack.push(state->memory.size());
+            break;
+        case OP_GAS:
+            state->stack.push(state->gas_left);
+            break;
+        case OP_JUMPDEST:
+            break;
+
         case OP_PUSH1:
             pc = load_push<1>(*state, pc + 1, code_end);
             break;
