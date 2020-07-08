@@ -419,6 +419,9 @@ evmc_result baseline_execute([[maybe_unused]] evmc_vm* vm, const evmc_host_inter
         case OP_REVERT:
             op_return<EVMC_REVERT>(*state);
             goto exit;
+        case OP_INVALID:
+            state->status = EVMC_INVALID_INSTRUCTION;
+            goto exit;
         }
     }
 
