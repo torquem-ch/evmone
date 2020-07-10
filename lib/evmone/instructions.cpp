@@ -186,7 +186,7 @@ const instruction* op_return(const instruction*, execution_state& state) noexcep
     const auto size = state.stack[1];
 
     if (!check_memory(state, offset, size))
-        return nullptr;
+        return state.exit(EVMC_OUT_OF_GAS);
 
     state.output_size = static_cast<size_t>(size);
     if (state.output_size != 0)
@@ -215,10 +215,10 @@ const instruction* op_call(const instruction* instr, execution_state& state) noe
     state.stack[0] = 0;
 
     if (!check_memory(state, input_offset, input_size))
-        return nullptr;
+        return state.exit(EVMC_OUT_OF_GAS);
 
     if (!check_memory(state, output_offset, output_size))
-        return nullptr;
+        return state.exit(EVMC_OUT_OF_GAS);
 
 
     auto msg = evmc_message{};
@@ -335,10 +335,10 @@ const instruction* op_delegatecall(const instruction* instr, execution_state& st
     state.stack[0] = 0;
 
     if (!check_memory(state, input_offset, input_size))
-        return nullptr;
+        return state.exit(EVMC_OUT_OF_GAS);
 
     if (!check_memory(state, output_offset, output_size))
-        return nullptr;
+        return state.exit(EVMC_OUT_OF_GAS);
 
     auto msg = evmc_message{};
     msg.kind = EVMC_DELEGATECALL;
@@ -404,10 +404,10 @@ const instruction* op_staticcall(const instruction* instr, execution_state& stat
     state.stack[0] = 0;
 
     if (!check_memory(state, input_offset, input_size))
-        return nullptr;
+        return state.exit(EVMC_OUT_OF_GAS);
 
     if (!check_memory(state, output_offset, output_size))
-        return nullptr;
+        return state.exit(EVMC_OUT_OF_GAS);
 
     if (state.msg->depth >= 1024)
         return ++instr;
@@ -465,7 +465,7 @@ const instruction* op_create(const instruction* instr, execution_state& state) n
     state.stack[0] = 0;
 
     if (!check_memory(state, init_code_offset, init_code_size))
-        return nullptr;
+        return state.exit(EVMC_OUT_OF_GAS);
 
     state.return_data.clear();
 
@@ -526,7 +526,7 @@ const instruction* op_create2(const instruction* instr, execution_state& state) 
     state.stack[0] = 0;
 
     if (!check_memory(state, init_code_offset, init_code_size))
-        return nullptr;
+        return state.exit(EVMC_OUT_OF_GAS);
 
     auto salt_cost = num_words(static_cast<size_t>(init_code_size)) * 6;
     state.gas_left -= salt_cost;
