@@ -11,6 +11,13 @@ namespace evmone
 {
 namespace
 {
+struct BaselineExecutionState : ExecutionState
+{
+    evmc_status_code status = EVMC_SUCCESS;
+    size_t output_offset = 0;
+    size_t output_size = 0;
+};
+
 template <size_t Len>
 const uint8_t* load_push(
     ExecutionState& state, const uint8_t* code, const uint8_t* code_end) noexcept
@@ -24,6 +31,25 @@ const uint8_t* load_push(
     state.stack.push(intx::be::load<intx::uint256>(buffer));
     return code + Len - 1;
 }
+
+
+template <evmc_status_code status_code>
+inline void op_return(BaselineExecutionState& state) noexcept
+{
+    const auto offset = state.stack[0];
+    const auto size = state.stack[1];
+
+    if (!check_memory(state, offset, size))
+    {
+        state.status = EVMC_OUT_OF_GAS;
+        return;
+    }
+
+    state.output_size = static_cast<size_t>(size);
+    if (state.output_size != 0)
+        state.output_offset = static_cast<size_t>(offset);
+    state.status = status_code;
+}
 }  // namespace
 
 evmc_result baseline_execute([[maybe_unused]] evmc_vm* vm, const evmc_host_interface* host,
@@ -32,13 +58,11 @@ evmc_result baseline_execute([[maybe_unused]] evmc_vm* vm, const evmc_host_inter
 {
     const auto op_tbl = get_op_table(rev);
 
-    auto state = std::make_unique<ExecutionState>();
+    auto state = std::make_unique<BaselineExecutionState>();
     state->msg = msg;
     state->host = evmc::HostContext{*host, ctx};
     state->gas_left = msg->gas;
     state->rev = rev;
-
-    evmc_result result{};
 
     const auto code_end = code + code_size;
     for (auto pc = code; pc != code_end; ++pc)
@@ -48,19 +72,19 @@ evmc_result baseline_execute([[maybe_unused]] evmc_vm* vm, const evmc_host_inter
 
         if ((state->gas_left -= metrics.gas_cost) < 0)
         {
-            result.status_code = EVMC_OUT_OF_GAS;
+            state->status = EVMC_OUT_OF_GAS;
             break;
         }
 
         if (state->stack.size() < metrics.stack_req)
         {
-            result.status_code = EVMC_STACK_UNDERFLOW;
+            state->status = EVMC_STACK_UNDERFLOW;
             break;
         }
 
         if (state->stack.size() + metrics.stack_change > evm_stack::limit)
         {
-            result.status_code = EVMC_STACK_OVERFLOW;
+            state->status = EVMC_STACK_OVERFLOW;
             break;
         }
 
@@ -147,7 +171,7 @@ evmc_result baseline_execute([[maybe_unused]] evmc_vm* vm, const evmc_host_inter
             const auto status_code = mload(*state);
             if (status_code != EVMC_SUCCESS)
             {
-                result.status_code = status_code;
+                state->status = status_code;
                 goto exit;
             }
             break;
@@ -157,7 +181,7 @@ evmc_result baseline_execute([[maybe_unused]] evmc_vm* vm, const evmc_host_inter
             const auto status_code = mstore(*state);
             if (status_code != EVMC_SUCCESS)
             {
-                result.status_code = status_code;
+                state->status = status_code;
                 goto exit;
             }
             break;
@@ -167,7 +191,7 @@ evmc_result baseline_execute([[maybe_unused]] evmc_vm* vm, const evmc_host_inter
             const auto status_code = mstore8(*state);
             if (status_code != EVMC_SUCCESS)
             {
-                result.status_code = status_code;
+                state->status = status_code;
                 goto exit;
             }
             break;
@@ -268,10 +292,21 @@ evmc_result baseline_execute([[maybe_unused]] evmc_vm* vm, const evmc_host_inter
         case OP_PUSH32:
             pc = load_push<32>(*state, pc + 1, code_end);
             break;
+
+        case OP_RETURN:
+            op_return<EVMC_SUCCESS>(*state);
+            goto exit;
+        case OP_REVERT:
+            op_return<EVMC_REVERT>(*state);
+            goto exit;
         }
     }
 
 exit:
-    return result;
+    const auto gas_left =
+        (state->status == EVMC_SUCCESS || state->status == EVMC_REVERT) ? state->gas_left : 0;
+
+    return evmc::make_result(
+        state->status, gas_left, &state->memory[state->output_offset], state->output_size);
 }
 }  // namespace evmone
