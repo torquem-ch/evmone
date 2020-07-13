@@ -521,6 +521,25 @@ evmc_status_code op_selfdestruct(BaselineExecutionState& state) noexcept
     state.host.selfdestruct(state.msg->destination, addr);
     return EVMC_SUCCESS;
 }
+
+inline evmc_status_code check_requirements(
+    const BaselineTraits* traits, BaselineExecutionState& state, uint8_t op) noexcept
+{
+    const auto metrics = traits[op];
+
+    if (metrics.gas_cost < 0)
+        return EVMC_UNDEFINED_INSTRUCTION;
+
+    if ((state.gas_left -= metrics.gas_cost) < 0)
+        return EVMC_OUT_OF_GAS;
+
+    const auto cond = state.stack.size() + metrics.stack_check;
+
+    if (cond < 0 || cond > evm_stack::limit)
+        return metrics.stack_check < 0 ? EVMC_STACK_UNDERFLOW : EVMC_STACK_OVERFLOW;
+
+    return EVMC_SUCCESS;
+}
 }  // namespace
 
 evmc_result baseline_execute([[maybe_unused]] evmc_vm* vm, const evmc_host_interface* host,
@@ -528,6 +547,7 @@ evmc_result baseline_execute([[maybe_unused]] evmc_vm* vm, const evmc_host_inter
     size_t code_size) noexcept
 {
     const auto& op_tbl = baseline_table[rev];
+
     const auto jumpdest_map = build_jumpdest_map(code, code_size);
 
     auto state = std::make_unique<BaselineExecutionState>();
@@ -540,26 +560,12 @@ evmc_result baseline_execute([[maybe_unused]] evmc_vm* vm, const evmc_host_inter
     for (auto pc = code; pc != code_end; ++pc)
     {
         const auto op = *pc;
-        const auto metrics = op_tbl[op];
 
-        if (metrics.gas_cost < 0)
+        const auto status = check_requirements(op_tbl.data(), *state, op);
+        if (status != EVMC_SUCCESS)
         {
-            state->status = EVMC_UNDEFINED_INSTRUCTION;
-            break;
-        }
-
-        if ((state->gas_left -= metrics.gas_cost) < 0)
-        {
-            state->status = EVMC_OUT_OF_GAS;
-            break;
-        }
-
-        const auto cond = state->stack.size() + metrics.stack_check;
-
-        if (cond < 0 || cond > evm_stack::limit)
-        {
-            state->status = metrics.stack_check < 0 ? EVMC_STACK_UNDERFLOW : EVMC_STACK_OVERFLOW;
-            break;
+            state->status = status;
+            goto exit;
         }
 
         switch (op)
