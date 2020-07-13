@@ -553,15 +553,13 @@ evmc_result baseline_execute([[maybe_unused]] evmc_vm* vm, const evmc_host_inter
             break;
         }
 
-        if (state->stack.size() < metrics.stack_req)
-        {
-            state->status = EVMC_STACK_UNDERFLOW;
-            break;
-        }
+        const auto stack_check =
+            metrics.stack_change <= 0 ? -metrics.stack_req : metrics.stack_change;
+        const auto cond = state->stack.size() + stack_check;
 
-        if (state->stack.size() + metrics.stack_change > evm_stack::limit)
+        if (cond < 0 || cond > evm_stack::limit)
         {
-            state->status = EVMC_STACK_OVERFLOW;
+            state->status = stack_check < 0 ? EVMC_STACK_UNDERFLOW : EVMC_STACK_OVERFLOW;
             break;
         }
 
