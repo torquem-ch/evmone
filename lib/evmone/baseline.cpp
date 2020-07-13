@@ -533,10 +533,10 @@ inline evmc_status_code check_requirements(
     if ((state.gas_left -= metrics.gas_cost) < 0)
         return EVMC_OUT_OF_GAS;
 
-    const auto cond = state.stack.size() + metrics.stack_check;
+    const auto cond = state.stack.size() - 1 + metrics.stack_check;
 
     if (cond < 0 || cond > evm_stack::limit)
-        return metrics.stack_check < 0 ? EVMC_STACK_UNDERFLOW : EVMC_STACK_OVERFLOW;
+        return (metrics.stack_check - 1) < 0 ? EVMC_STACK_UNDERFLOW : EVMC_STACK_OVERFLOW;
 
     return EVMC_SUCCESS;
 }

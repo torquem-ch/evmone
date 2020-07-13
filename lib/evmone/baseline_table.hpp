@@ -303,7 +303,7 @@ constexpr std::array<BaselineTraits, 256> get_baseline_table() noexcept
     {
         const auto st = stack_traits[i];
         const auto stack_check = static_cast<int8_t>(st.change <= 0 ? -st.required : st.change);
-        table[i] = {gas_costs[Revision][i], stack_check};
+        table[i] = {gas_costs[Revision][i], static_cast<int8_t>(stack_check + 1)};
     }
     return table;
 }
