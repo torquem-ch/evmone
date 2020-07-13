@@ -3,7 +3,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "baseline.hpp"
-#include "analysis.hpp"
+#include "baseline_table.hpp"
+#include "execution_state.hpp"
 #include "instructions.hpp"
 #include <memory>
 
@@ -526,7 +527,7 @@ evmc_result baseline_execute([[maybe_unused]] evmc_vm* vm, const evmc_host_inter
     evmc_host_context* ctx, evmc_revision rev, const evmc_message* msg, const uint8_t* code,
     size_t code_size) noexcept
 {
-    const auto op_tbl = get_op_table(rev);
+    const auto& op_tbl = baseline_table[rev];
     const auto jumpdest_map = build_jumpdest_map(code, code_size);
 
     auto state = std::make_unique<BaselineExecutionState>();
@@ -541,7 +542,7 @@ evmc_result baseline_execute([[maybe_unused]] evmc_vm* vm, const evmc_host_inter
         const auto op = *pc;
         const auto metrics = op_tbl[op];
 
-        if (metrics.fn == op_undefined)
+        if (metrics.gas_cost < 0)
         {
             state->status = EVMC_UNDEFINED_INSTRUCTION;
             break;
@@ -553,13 +554,11 @@ evmc_result baseline_execute([[maybe_unused]] evmc_vm* vm, const evmc_host_inter
             break;
         }
 
-        const auto stack_check =
-            metrics.stack_change <= 0 ? -metrics.stack_req : metrics.stack_change;
-        const auto cond = state->stack.size() + stack_check;
+        const auto cond = state->stack.size() + metrics.stack_check;
 
         if (cond < 0 || cond > evm_stack::limit)
         {
-            state->status = stack_check < 0 ? EVMC_STACK_UNDERFLOW : EVMC_STACK_OVERFLOW;
+            state->status = metrics.stack_check < 0 ? EVMC_STACK_UNDERFLOW : EVMC_STACK_OVERFLOW;
             break;
         }
 
