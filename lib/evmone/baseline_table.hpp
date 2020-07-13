@@ -171,7 +171,7 @@ constexpr GasCostTable get_gas_cost_table<EVMC_ISTANBUL>() noexcept
     return table;
 }
 
-std::array<GasCostTable, num_revisions> gas_costs = {
+constexpr std::array<GasCostTable, num_revisions> gas_costs = {
     get_gas_cost_table<EVMC_FRONTIER>(),
     get_gas_cost_table<EVMC_HOMESTEAD>(),
     get_gas_cost_table<EVMC_TANGERINE_WHISTLE>(),
@@ -297,7 +297,7 @@ struct BaselineTraits
 template <evmc_revision Revision>
 constexpr std::array<BaselineTraits, 256> get_baseline_table() noexcept
 {
-    std::array<BaselineTraits, 256> table;
+    std::array<BaselineTraits, 256> table{};
 
     for (size_t i = 0; i < table.size(); ++i)
     {
@@ -308,7 +308,7 @@ constexpr std::array<BaselineTraits, 256> get_baseline_table() noexcept
     return table;
 }
 
-std::array<std::array<BaselineTraits, 256>, num_revisions> baseline_table = {
+constexpr std::array<std::array<BaselineTraits, 256>, num_revisions> baseline_table = {
     get_baseline_table<EVMC_FRONTIER>(),
     get_baseline_table<EVMC_HOMESTEAD>(),
     get_baseline_table<EVMC_TANGERINE_WHISTLE>(),
