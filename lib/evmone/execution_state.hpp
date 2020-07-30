@@ -103,7 +103,7 @@ struct ExecutionState
     /// Clears the ExecutionState so that it could be reused.
     ///
     /// host has to be reset separately.
-    void clear()
+    [[clang::no_sanitize("bounds")]] void clear()
     {
         gas_left = 0;
         stack.top_item = stack.storage - 1;
