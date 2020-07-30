@@ -84,20 +84,34 @@ struct ExecutionState
     int64_t gas_left = 0;
     evm_stack stack;
     evm_memory memory;
-    const evmc_message& msg;
+    const evmc_message* msg;
     evmc::HostContext host;
-    const evmc_revision rev = {};
+    evmc_revision rev = {};
     bytes return_data;
-    const bytes_view code;
+    bytes_view code;
 
     ExecutionState(const evmc_message& message, evmc_revision revision,
         const evmc_host_interface& host_interface, evmc_host_context* host_ctx,
         const uint8_t* code_ptr, size_t code_size) noexcept
       : gas_left{message.gas},
-        msg{message},
+        msg{&message},
         host{host_interface, host_ctx},
         rev{revision},
         code{code_ptr, code_size}
     {}
+
+    /// Clears the ExecutionState so that it could be reused.
+    ///
+    /// host has to be reset separately.
+    void clear()
+    {
+        gas_left = 0;
+        stack.top_item = stack.storage - 1;
+        memory.resize(0);
+        msg = nullptr;
+        rev = {};
+        return_data.clear();
+        code = {};
+    }
 };
 }  // namespace evmone

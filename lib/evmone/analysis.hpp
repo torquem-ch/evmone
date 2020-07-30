@@ -63,6 +63,17 @@ struct execution_state : ExecutionState
         status = status_code;
         return nullptr;
     }
+
+    /// Clears the execution_state so that it could be reused.
+    void clear()
+    {
+        ExecutionState::clear();
+        status = EVMC_SUCCESS;
+        output_offset = 0;
+        output_size = 0;
+        current_block_cost = 0;
+        analysis = nullptr;
+    }
 };
 
 union instruction_argument
