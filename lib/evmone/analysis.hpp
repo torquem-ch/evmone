@@ -65,7 +65,7 @@ struct execution_state : ExecutionState
     }
 
     /// Clears the execution_state so that it could be reused.
-    void clear()
+    void clear() noexcept
     {
         ExecutionState::clear();
         status = EVMC_SUCCESS;
