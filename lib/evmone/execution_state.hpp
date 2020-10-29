@@ -90,6 +90,8 @@ struct ExecutionState
     bytes return_data;
     bytes_view code;
 
+    ExecutionState() = default;
+
     ExecutionState(const evmc_message& message, evmc_revision revision,
         const evmc_host_interface& host_interface, evmc_host_context* host_ctx,
         const uint8_t* code_ptr, size_t code_size) noexcept
@@ -101,14 +103,13 @@ struct ExecutionState
     {}
 
     /// Clears the ExecutionState so that it could be reused.
-    ///
-    /// host has to be reset separately.
     [[clang::no_sanitize("bounds")]] void clear() noexcept
     {
         gas_left = 0;
         stack.top_item = stack.storage - 1;
         memory.resize(0);
         msg = nullptr;
+        host = {};
         rev = {};
         return_data.clear();
         code = {};
