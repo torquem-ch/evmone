@@ -561,11 +561,19 @@ inline evmc_status_code mstore8(ExecutionState& state) noexcept
     return EVMC_SUCCESS;
 }
 
-inline void sload(ExecutionState& state) noexcept
+inline evmc_status_code sload(ExecutionState& state) noexcept
 {
+    bool warm_read = false;
     auto& x = state.stack.top();
-    x = intx::be::load<uint256>(
-        state.host.get_storage(state.msg->destination, intx::be::store<evmc::bytes32>(x)));
+    x = intx::be::load<uint256>(state.host.get_storage(
+        state.msg->destination, intx::be::store<evmc::bytes32>(x), &warm_read));
+
+    int extra_cost = 0;
+    if (state.rev >= EVMC_BERLIN && !warm_read)
+        extra_cost = 2000;  // COLD_SLOAD_COST - WARM_STORAGE_READ_COST
+    if ((state.gas_left -= extra_cost) < 0)
+        return EVMC_OUT_OF_GAS;
+    return EVMC_SUCCESS;
 }
 
 inline evmc_status_code sstore(ExecutionState& state) noexcept

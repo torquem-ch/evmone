@@ -373,8 +373,15 @@ evmc_result baseline_execute(evmc_vm* /*vm*/, const evmc_host_interface* host,
             msize(*state);
             break;
         case OP_SLOAD:
-            sload(*state);
+        {
+            const auto status_code = sload(*state);
+            if (status_code != EVMC_SUCCESS)
+            {
+                state->status = status_code;
+                goto exit;
+            }
             break;
+        }
         case OP_SSTORE:
         {
             const auto status_code = sstore(*state);
