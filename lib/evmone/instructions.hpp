@@ -586,12 +586,20 @@ inline evmc_status_code sstore(ExecutionState& state) noexcept
 
     const auto key = intx::be::store<evmc::bytes32>(state.stack.pop());
     const auto value = intx::be::store<evmc::bytes32>(state.stack.pop());
-    const auto status = state.host.set_storage(state.msg->destination, key, value);
-    int cost = 0;
+
+    bool warm_read = false;
+    const auto status = state.host.set_storage(state.msg->destination, key, value, &warm_read);
+    static constexpr int COLD_SLOAD_COST = 2100;        // EIP-2929
+    static constexpr int WARM_STORAGE_READ_COST = 100;  // EIP-2929
+    int cost = state.rev >= EVMC_BERLIN && !warm_read ? COLD_SLOAD_COST : 0;
+
     switch (status)
     {
     case EVMC_STORAGE_UNCHANGED:
-        if (state.rev >= EVMC_ISTANBUL)
+    case EVMC_STORAGE_MODIFIED_AGAIN:
+        if (state.rev >= EVMC_BERLIN)
+            cost += WARM_STORAGE_READ_COST;
+        else if (state.rev == EVMC_ISTANBUL)
             cost = 800;
         else if (state.rev == EVMC_CONSTANTINOPLE)
             cost = 200;
@@ -599,21 +607,14 @@ inline evmc_status_code sstore(ExecutionState& state) noexcept
             cost = 5000;
         break;
     case EVMC_STORAGE_MODIFIED:
-        cost = 5000;
-        break;
-    case EVMC_STORAGE_MODIFIED_AGAIN:
-        if (state.rev >= EVMC_ISTANBUL)
-            cost = 800;
-        else if (state.rev == EVMC_CONSTANTINOPLE)
-            cost = 200;
+    case EVMC_STORAGE_DELETED:
+        if (state.rev >= EVMC_BERLIN)
+            cost += 5000 - COLD_SLOAD_COST;
         else
             cost = 5000;
         break;
     case EVMC_STORAGE_ADDED:
-        cost = 20000;
-        break;
-    case EVMC_STORAGE_DELETED:
-        cost = 5000;
+        cost += 20000;
         break;
     }
     if ((state.gas_left -= cost) < 0)
