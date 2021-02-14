@@ -218,8 +218,15 @@ evmc_result baseline_execute(evmc_vm* /*vm*/, const evmc_host_interface* host,
             address(*state);
             break;
         case OP_BALANCE:
-            balance(*state);
+        {
+            const auto status_code = balance(*state);
+            if (status_code != EVMC_SUCCESS)
+            {
+                state->status = status_code;
+                goto exit;
+            }
             break;
+        }
         case OP_ORIGIN:
             origin(*state);
             break;
@@ -262,8 +269,15 @@ evmc_result baseline_execute(evmc_vm* /*vm*/, const evmc_host_interface* host,
             gasprice(*state);
             break;
         case OP_EXTCODESIZE:
-            extcodesize(*state);
+        {
+            const auto status_code = extcodesize(*state);
+            if (status_code != EVMC_SUCCESS)
+            {
+                state->status = status_code;
+                goto exit;
+            }
             break;
+        }
         case OP_EXTCODECOPY:
         {
             const auto status_code = extcodecopy(*state);
@@ -288,9 +302,15 @@ evmc_result baseline_execute(evmc_vm* /*vm*/, const evmc_host_interface* host,
             break;
         }
         case OP_EXTCODEHASH:
-            extcodehash(*state);
+        {
+            const auto status_code = extcodehash(*state);
+            if (status_code != EVMC_SUCCESS)
+            {
+                state->status = status_code;
+                goto exit;
+            }
             break;
-
+        }
         case OP_BLOCKHASH:
             blockhash(*state);
             break;
