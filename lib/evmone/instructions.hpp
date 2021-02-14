@@ -563,16 +563,19 @@ inline evmc_status_code mstore8(ExecutionState& state) noexcept
 
 inline evmc_status_code sload(ExecutionState& state) noexcept
 {
-    bool warm_read = false;
     auto& x = state.stack.top();
-    x = intx::be::load<uint256>(state.host.get_storage(
-        state.msg->destination, intx::be::store<evmc::bytes32>(x), &warm_read));
+    const auto key = intx::be::store<evmc::bytes32>(x);
 
-    int extra_cost = 0;
-    if (state.rev >= EVMC_BERLIN && !warm_read)
-        extra_cost = 2000;  // COLD_SLOAD_COST - WARM_STORAGE_READ_COST
-    if ((state.gas_left -= extra_cost) < 0)
-        return EVMC_OUT_OF_GAS;
+    if (state.rev >= EVMC_BERLIN &&
+        state.host.access_storage(state.msg->destination, key) == EVMC_COLD_ACCESS)
+    {
+        // EIP-2929: COLD_SLOAD_COST - WARM_STORAGE_READ_COST = 2000
+        if ((state.gas_left -= 2000) < 0)
+            return EVMC_OUT_OF_GAS;
+    }
+
+    x = intx::be::load<uint256>(state.host.get_storage(state.msg->destination, key));
+
     return EVMC_SUCCESS;
 }
 
@@ -587,11 +590,17 @@ inline evmc_status_code sstore(ExecutionState& state) noexcept
     const auto key = intx::be::store<evmc::bytes32>(state.stack.pop());
     const auto value = intx::be::store<evmc::bytes32>(state.stack.pop());
 
-    bool warm_read = false;
-    const auto status = state.host.set_storage(state.msg->destination, key, value, &warm_read);
-    static constexpr int COLD_SLOAD_COST = 2100;        // EIP-2929
-    static constexpr int WARM_STORAGE_READ_COST = 100;  // EIP-2929
-    int cost = state.rev >= EVMC_BERLIN && !warm_read ? COLD_SLOAD_COST : 0;
+    // EIP-2929
+    static constexpr int COLD_SLOAD_COST = 2100;
+    static constexpr int WARM_STORAGE_READ_COST = 100;
+    int cost = 0;
+    if (state.rev >= EVMC_BERLIN &&
+        state.host.access_storage(state.msg->destination, key) == EVMC_COLD_ACCESS)
+    {
+        cost = COLD_SLOAD_COST;
+    }
+
+    const auto status = state.host.set_storage(state.msg->destination, key, value);
 
     switch (status)
     {
