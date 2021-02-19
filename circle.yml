@@ -39,7 +39,7 @@ commands:
           command: |
             [ "$SILKWORM_BUILD" = true ] || exit 0
             git clone --no-checkout --single-branch https://github.com/torquem-ch/silkworm.git .
-            git checkout c2bef452ddc14d44e14cd9e0c6ff8fddc6d17d96
+            git checkout c181f5fc0d6a49a990c85dc355b8b45a2f6eb968
             git submodule init
             git submodule deinit tests
             git submodule update --recursive --depth=1 --progress
@@ -249,7 +249,7 @@ jobs:
           rev: v7.0.1
       - run:
           name: "Silkworm-driven consensus tests"
-          command: ~/silkworm/consensus --evm ~/package/lib/libevmone.so --tests ~/tests
+          command: ~/silkworm/consensus --evm ~/package/lib/libevmone.so --tests ~/tests --skip-eip-2315
 
 
   gcc-min:
