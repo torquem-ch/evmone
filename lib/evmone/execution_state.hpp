@@ -55,6 +55,30 @@ struct evm_stack
     [[clang::no_sanitize("bounds")]] void clear() noexcept { top_item = storage - 1; }
 };
 
+class evm_return_stack
+{
+    std::vector<const void*> m_stack;
+
+public:
+    evm_return_stack() noexcept {}
+
+    evm_return_stack(const evm_return_stack&) = delete;
+    evm_return_stack& operator=(const evm_return_stack&) = delete;
+
+    [[nodiscard]] size_t size() const noexcept { return m_stack.size(); }
+
+    void push(const void* ptr) noexcept { m_stack.push_back(ptr); }
+
+    const void* pop() noexcept
+    {
+        const void* ptr = m_stack.back();
+        m_stack.pop_back();
+        return ptr;
+    }
+
+    void clear() noexcept { m_stack.clear(); }
+};
+
 /// The EVM memory.
 ///
 /// At this point it is a wrapper for std::vector<uint8_t> with initial allocation of 4k.
@@ -89,6 +113,7 @@ struct ExecutionState
 {
     int64_t gas_left = 0;
     evm_stack stack;
+    evm_return_stack return_stack;
     evm_memory memory;
     const evmc_message* msg = nullptr;
     evmc::HostContext host;
@@ -118,6 +143,7 @@ struct ExecutionState
     {
         gas_left = message.gas;
         stack.clear();
+        return_stack.clear();
         memory.clear();
         msg = &message;
         host = {host_interface, host_ctx};
