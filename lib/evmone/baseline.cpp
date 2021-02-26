@@ -14,18 +14,26 @@ namespace
 {
 using JumpdestMap = std::vector<bool>;
 
-JumpdestMap build_jumpdest_map(const uint8_t* code, size_t code_size, evmc_opcode dest_opcode)
+struct JumpdestAnalysis
 {
-    JumpdestMap m(code_size);
+    JumpdestMap jumpdest;
+    JumpdestMap beginsub;
+};
+
+JumpdestAnalysis build_jumpdest_maps(const uint8_t* code, size_t code_size)
+{
+    JumpdestAnalysis a{JumpdestMap(code_size), JumpdestMap(code_size)};
     for (size_t i = 0; i < code_size; ++i)
     {
         const auto op = code[i];
-        if (op == dest_opcode)
-            m[i] = true;
+        if (op == OP_JUMPDEST)
+            a.jumpdest[i] = true;
+        else if (op == OP_BEGINSUB)
+            a.beginsub[i] = true;
         else if (op >= OP_PUSH1 && op <= OP_PUSH32)
             i += static_cast<size_t>(op - OP_PUSH1 + 1);
     }
-    return m;
+    return a;
 }
 
 const uint8_t* op_jump(ExecutionState& state, const JumpdestMap& jumpdest_map) noexcept
@@ -141,8 +149,7 @@ evmc_result baseline_execute_on_state(ExecutionState& state) noexcept
 
     const auto instruction_names = evmc_get_instruction_names_table(rev);
     const auto instruction_metrics = evmc_get_instruction_metrics_table(rev);
-    const auto jumpdest_map = build_jumpdest_map(code, code_size, OP_JUMPDEST);
-    const auto beginsub_map = build_jumpdest_map(code, code_size, OP_BEGINSUB);
+    const auto analysis = build_jumpdest_maps(code, code_size);
 
     const auto code_end = code + code_size;
     auto* pc = code;
@@ -413,12 +420,12 @@ evmc_result baseline_execute_on_state(ExecutionState& state) noexcept
         }
 
         case OP_JUMP:
-            pc = op_jump(state, jumpdest_map);
+            pc = op_jump(state, analysis.jumpdest);
             continue;
         case OP_JUMPI:
             if (state.stack[1] != 0)
             {
-                pc = op_jump(state, jumpdest_map);
+                pc = op_jump(state, analysis.jumpdest);
             }
             else
             {
@@ -466,7 +473,7 @@ evmc_result baseline_execute_on_state(ExecutionState& state) noexcept
             pc = op_returnsub(state);
             continue;
         case OP_JUMPSUB:
-            pc = op_jumpsub(state, beginsub_map, pc);
+            pc = op_jumpsub(state, analysis.beginsub, pc);
             continue;
 
         case OP_PUSH1:
