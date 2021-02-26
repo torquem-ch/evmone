@@ -425,6 +425,17 @@ evmc_result baseline_execute_on_state(ExecutionState& state) noexcept
             break;
         case OP_JUMPDEST:
             break;
+        case OP_BEGINSUB:
+            state.status = EVMC_OUT_OF_GAS;
+            goto exit;
+        case OP_RETURNSUB:
+            // TODO(Andrew): implement
+            state.status = EVMC_INTERNAL_ERROR;
+            goto exit;
+        case OP_JUMPSUB:
+            // TODO(Andrew): implement
+            state.status = EVMC_INTERNAL_ERROR;
+            goto exit;
 
         case OP_PUSH1:
             pc = load_push<1>(state, pc + 1, code_end);
