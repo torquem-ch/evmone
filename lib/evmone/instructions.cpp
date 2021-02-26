@@ -81,6 +81,23 @@ const instruction* op_jumpi(const instruction* instr, execution_state& state) no
     return instr;
 }
 
+const instruction* op_beginsub(const instruction*, execution_state& state) noexcept
+{
+    return state.exit(EVMC_OUT_OF_GAS);
+}
+
+const instruction* op_jumpsub(const instruction*, execution_state& state) noexcept
+{
+    // TODO(Andrew): implement
+    return state.exit(EVMC_INTERNAL_ERROR);
+}
+
+const instruction* op_returnsub(const instruction*, execution_state& state) noexcept
+{
+    // TODO(Andrew): implement
+    return state.exit(EVMC_INTERNAL_ERROR);
+}
+
 const instruction* op_pc(const instruction* instr, execution_state& state) noexcept
 {
     state.stack.push(instr->arg.number);
@@ -257,6 +274,9 @@ constexpr std::array<instruction_exec_fn, 256> instruction_implementations = [](
     table[OP_MSIZE] = op<msize>;
     table[OP_GAS] = op_gas;
     table[OPX_BEGINBLOCK] = opx_beginblock;
+    table[OP_BEGINSUB] = op_beginsub;
+    table[OP_RETURNSUB] = op_returnsub;
+    table[OP_JUMPSUB] = op_jumpsub;
 
     for (auto op = size_t{OP_PUSH1}; op <= OP_PUSH8; ++op)
         table[op] = op_push_small;

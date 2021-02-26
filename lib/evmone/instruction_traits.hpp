@@ -92,6 +92,9 @@ constexpr inline std::array<Traits, 256> traits = []() noexcept {
     table[OP_MSIZE] = {"MSIZE", 0, 1};
     table[OP_GAS] = {"GAS", 0, 1};
     table[OP_JUMPDEST] = {"JUMPDEST", 0, 0};
+    table[OP_BEGINSUB] = {"BEGINSUB", 0, 0};
+    table[OP_RETURNSUB] = {"RETURNSUB", 0, 0};
+    table[OP_JUMPSUB] = {"JUMPSUB", 1, -1};
 
     table[OP_PUSH1] = {"PUSH1", 0, 1};
     table[OP_PUSH2] = {"PUSH2", 0, 1};
@@ -335,6 +338,10 @@ constexpr inline std::array<int16_t, 256> gas_costs<EVMC_ISTANBUL> = []() noexce
 template <>
 constexpr inline std::array<int16_t, 256> gas_costs<EVMC_BERLIN> = []() noexcept {
     auto table = gas_costs<EVMC_ISTANBUL>;
+
+    table[OP_BEGINSUB] = 2;
+    table[OP_RETURNSUB] = 5;
+    table[OP_JUMPSUB] = 10;
 
     // EIP-2929 WARM_STORAGE_READ_COST
     table[OP_EXTCODESIZE] = 100;

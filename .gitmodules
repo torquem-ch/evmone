@@ -1,4 +1,4 @@
 [submodule "evmc"]
 	path = evmc
 	url = https://github.com/torquem-ch/evmc
-	branch = eip-2929
+	branch = eip-2315
