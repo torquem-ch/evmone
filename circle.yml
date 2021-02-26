@@ -249,7 +249,7 @@ jobs:
           rev: v7.0.1
       - run:
           name: "Silkworm-driven consensus tests"
-          command: ~/silkworm/consensus --evm ~/package/lib/libevmone.so --tests ~/tests --skip-eip-2315
+          command: ~/silkworm/consensus --evm ~/package/lib/libevmone.so --tests ~/tests
 
 
   gcc-min:

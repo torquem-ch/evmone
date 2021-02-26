@@ -14,13 +14,13 @@ namespace
 {
 using JumpdestMap = std::vector<bool>;
 
-JumpdestMap build_jumpdest_map(const uint8_t* code, size_t code_size)
+JumpdestMap build_jumpdest_map(const uint8_t* code, size_t code_size, evmc_opcode dest_opcode)
 {
     JumpdestMap m(code_size);
     for (size_t i = 0; i < code_size; ++i)
     {
         const auto op = code[i];
-        if (op == OP_JUMPDEST)
+        if (op == dest_opcode)
             m[i] = true;
         else if (op >= OP_PUSH1 && op <= OP_PUSH32)
             i += static_cast<size_t>(op - OP_PUSH1 + 1);
@@ -38,6 +38,39 @@ const uint8_t* op_jump(ExecutionState& state, const JumpdestMap& jumpdest_map) n
     }
 
     return &state.code[static_cast<size_t>(dst)];
+}
+
+const uint8_t* op_jumpsub(
+    ExecutionState& state, const JumpdestMap& beginsub_map, const uint8_t* pc) noexcept
+{
+    const auto dst = state.stack.pop();
+    if (dst >= beginsub_map.size() || !beginsub_map[static_cast<size_t>(dst)])
+    {
+        state.status = EVMC_BAD_JUMP_DESTINATION;
+        return &state.code[0] + state.code.size();
+    }
+
+    if (state.return_stack.size() >= 1023)
+    {
+        state.status = EVMC_STACK_OVERFLOW;
+        return &state.code[0] + state.code.size();
+    }
+
+    state.return_stack.push(pc + 1);
+
+    return &state.code[static_cast<size_t>(dst)] + 1;
+}
+
+const uint8_t* op_returnsub(ExecutionState& state) noexcept
+{
+    if (state.return_stack.size() == 0)
+    {
+        state.status = EVMC_STACK_UNDERFLOW;
+        return &state.code[0] + state.code.size();
+    }
+
+    const void* pc = state.return_stack.pop();
+    return static_cast<const uint8_t*>(pc);
 }
 
 template <size_t Len>
@@ -108,7 +141,8 @@ evmc_result baseline_execute_on_state(ExecutionState& state) noexcept
 
     const auto instruction_names = evmc_get_instruction_names_table(rev);
     const auto instruction_metrics = evmc_get_instruction_metrics_table(rev);
-    const auto jumpdest_map = build_jumpdest_map(code, code_size);
+    const auto jumpdest_map = build_jumpdest_map(code, code_size, OP_JUMPDEST);
+    const auto beginsub_map = build_jumpdest_map(code, code_size, OP_BEGINSUB);
 
     const auto code_end = code + code_size;
     auto* pc = code;
@@ -429,13 +463,11 @@ evmc_result baseline_execute_on_state(ExecutionState& state) noexcept
             state.status = EVMC_OUT_OF_GAS;
             goto exit;
         case OP_RETURNSUB:
-            // TODO(Andrew): implement
-            state.status = EVMC_INTERNAL_ERROR;
-            goto exit;
+            pc = op_returnsub(state);
+            continue;
         case OP_JUMPSUB:
-            // TODO(Andrew): implement
-            state.status = EVMC_INTERNAL_ERROR;
-            goto exit;
+            pc = op_jumpsub(state, beginsub_map, pc);
+            continue;
 
         case OP_PUSH1:
             pc = load_push<1>(state, pc + 1, code_end);
