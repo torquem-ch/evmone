@@ -15,69 +15,49 @@ using bytes = std::basic_string<uint8_t>;
 using bytes_view = std::basic_string_view<uint8_t>;
 
 
-/// The stack for 256-bit EVM words.
+/// The stack for EVM words (256-bit integers in data stack, pointers in return stack).
 ///
 /// This implementation reserves memory inplace for all possible stack items (1024),
 /// so this type is big. Make sure it is allocated on heap.
-struct evm_stack
+template <class Word>
+struct generic_stack
 {
     /// The maximum number of stack items.
     static constexpr auto limit = 1024;
 
     /// The pointer to the top item, or below the stack bottom if stack is empty.
-    intx::uint256* top_item;
+    Word* top_item;
 
     /// The storage allocated for maximum possible number of items.
     /// This is also the pointer to the bottom item.
-    /// Items are aligned to 256 bits for better packing in cache lines.
-    alignas(sizeof(intx::uint256)) intx::uint256 storage[limit];
+    /// Items are aligned for better packing in cache lines.
+    alignas(sizeof(Word)) Word storage[limit];
 
     /// Default constructor. Sets the top_item pointer to below the stack bottom.
-    evm_stack() noexcept { clear(); }
+    generic_stack() noexcept { clear(); }
 
     /// The current number of items on the stack.
     [[nodiscard]] int size() const noexcept { return static_cast<int>(top_item + 1 - storage); }
 
     /// Returns the reference to the top item.
-    [[nodiscard]] intx::uint256& top() noexcept { return *top_item; }
+    [[nodiscard]] Word& top() noexcept { return *top_item; }
 
     /// Returns the reference to the stack item on given position from the stack top.
-    [[nodiscard]] intx::uint256& operator[](int index) noexcept { return *(top_item - index); }
+    [[nodiscard]] Word& operator[](int index) noexcept { return *(top_item - index); }
 
     /// Pushes an item on the stack. The stack limit is not checked.
-    void push(const intx::uint256& item) noexcept { *++top_item = item; }
+    void push(const Word& item) noexcept { *++top_item = item; }
 
     /// Returns an item popped from the top of the stack.
-    intx::uint256 pop() noexcept { return *top_item--; }
+    Word pop() noexcept { return *top_item--; }
 
     /// Clears the stack by resetting its size to 0 (sets the top_item pointer to below the stack
     /// bottom).
     [[clang::no_sanitize("bounds")]] void clear() noexcept { top_item = storage - 1; }
 };
 
-class evm_return_stack
-{
-    std::vector<const void*> m_stack;
+using evm_stack = generic_stack<uint256>;
 
-public:
-    evm_return_stack() noexcept {}
-
-    evm_return_stack(const evm_return_stack&) = delete;
-    evm_return_stack& operator=(const evm_return_stack&) = delete;
-
-    [[nodiscard]] size_t size() const noexcept { return m_stack.size(); }
-
-    void push(const void* ptr) noexcept { m_stack.push_back(ptr); }
-
-    const void* pop() noexcept
-    {
-        const void* ptr = m_stack.back();
-        m_stack.pop_back();
-        return ptr;
-    }
-
-    void clear() noexcept { m_stack.clear(); }
-};
 
 /// The EVM memory.
 ///
@@ -113,7 +93,7 @@ struct ExecutionState
 {
     int64_t gas_left = 0;
     evm_stack stack;
-    evm_return_stack return_stack;
+    generic_stack<const void*> return_stack;
     evm_memory memory;
     const evmc_message* msg = nullptr;
     evmc::HostContext host;
