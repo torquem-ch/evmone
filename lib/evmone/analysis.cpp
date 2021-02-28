@@ -82,6 +82,13 @@ code_analysis analyze(evmc_revision rev, const uint8_t* code, size_t code_size) 
         else
             analysis.instrs.emplace_back(opcode_info.fn);
 
+        if (opcode == OP_BEGINSUB)
+        {
+            analysis.beginsub_offsets.emplace_back(static_cast<int32_t>(code_pos - code - 1));
+            // point to the instruction following BEGINSUB
+            analysis.beginsub_targets.emplace_back(static_cast<int32_t>(analysis.instrs.size()));
+        }
+
         auto& instr = analysis.instrs.back();
 
         bool is_terminator = false;  // A flag whenever this is a block terminating instruction.
@@ -89,6 +96,9 @@ code_analysis analyze(evmc_revision rev, const uint8_t* code, size_t code_size) 
         {
         case OP_JUMP:
         case OP_JUMPI:
+        case OP_JUMPSUB:
+        case OP_BEGINSUB:
+        case OP_RETURNSUB:
         case OP_STOP:
         case OP_RETURN:
         case OP_REVERT:

@@ -141,6 +141,16 @@ struct code_analysis
     /// matching the elements from jumdest_offsets.
     /// This is value to which the next instruction pointer must be set in JUMP/JUMPI.
     std::vector<int32_t> jumpdest_targets;
+
+    /// The offsets of BEGINSUBs in the original code.
+    /// These are values that JUMPSUB receives as an argument.
+    /// The elements are sorted.
+    std::vector<int32_t> beginsub_offsets;
+
+    /// The indexes of the instructions in the generated instruction table
+    /// matching the elements from beginsub_offsets.
+    /// This is value to which the next instruction pointer must be set in JUMPSUB.
+    std::vector<int32_t> beginsub_targets;
 };
 
 inline int find_jumpdest(const code_analysis& analysis, int offset) noexcept
@@ -150,6 +160,16 @@ inline int find_jumpdest(const code_analysis& analysis, int offset) noexcept
     const auto it = std::lower_bound(begin, end, offset);
     return (it != end && *it == offset) ?
                analysis.jumpdest_targets[static_cast<size_t>(it - begin)] :
+               -1;
+}
+
+inline int find_beginsub(const code_analysis& analysis, int offset) noexcept
+{
+    const auto begin = std::begin(analysis.beginsub_offsets);
+    const auto end = std::end(analysis.beginsub_offsets);
+    const auto it = std::lower_bound(begin, end, offset);
+    return (it != end && *it == offset) ?
+               analysis.beginsub_targets[static_cast<size_t>(it - begin)] :
                -1;
 }
 

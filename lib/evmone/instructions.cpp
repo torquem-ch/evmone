@@ -86,16 +86,30 @@ const instruction* op_beginsub(const instruction*, execution_state& state) noexc
     return state.exit(EVMC_OUT_OF_GAS);
 }
 
-const instruction* op_jumpsub(const instruction*, execution_state& state) noexcept
+const instruction* op_jumpsub(const instruction* instr, execution_state& state) noexcept
 {
-    // TODO(Andrew): implement
-    return state.exit(EVMC_INTERNAL_ERROR);
+    const auto dst = state.stack.pop();
+    auto pc = -1;
+    if (std::numeric_limits<int>::max() < dst ||
+        (pc = find_beginsub(*state.analysis, static_cast<int>(dst))) < 0)
+        return state.exit(EVMC_BAD_JUMP_DESTINATION);
+
+    if (state.return_stack.size() >= 1023)
+        return state.exit(EVMC_STACK_OVERFLOW);
+
+    state.return_stack.push(instr + 1);
+
+    return &state.analysis->instrs[static_cast<size_t>(pc)];
 }
 
 const instruction* op_returnsub(const instruction*, execution_state& state) noexcept
 {
-    // TODO(Andrew): implement
-    return state.exit(EVMC_INTERNAL_ERROR);
+    if (state.return_stack.size() == 0)
+    {
+        return state.exit(EVMC_STACK_UNDERFLOW);
+    }
+
+    return static_cast<const instruction*>(state.return_stack.pop());
 }
 
 const instruction* op_pc(const instruction* instr, execution_state& state) noexcept
