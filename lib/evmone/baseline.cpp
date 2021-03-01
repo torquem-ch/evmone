@@ -137,11 +137,11 @@ evmc_result baseline_execute(evmc_vm* /*vm*/, const evmc_host_interface* host,
     evmc_host_context* ctx, evmc_revision rev, const evmc_message* msg, const uint8_t* code,
     size_t code_size) noexcept
 {
-    ExecutionState state(*msg, rev, *host, ctx, code, code_size);
-    return baseline_execute_on_state(state);
+    auto state = std::make_unique<ExecutionState>(*msg, rev, *host, ctx, code, code_size);
+    return baseline_execute(*state);
 }
 
-evmc_result baseline_execute_on_state(ExecutionState& state) noexcept
+evmc_result baseline_execute(ExecutionState& state) noexcept
 {
     const auto rev = state.rev;
     const auto code = state.code.data();
