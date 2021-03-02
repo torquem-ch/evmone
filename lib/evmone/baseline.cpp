@@ -467,7 +467,7 @@ evmc_result baseline_execute(ExecutionState& state) noexcept
         case OP_JUMPDEST:
             break;
         case OP_BEGINSUB:
-            state.status = EVMC_OUT_OF_GAS;
+            state.status = EVMC_INVALID_INSTRUCTION;
             goto exit;
         case OP_RETURNSUB:
             pc = op_returnsub(state);

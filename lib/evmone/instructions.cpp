@@ -83,7 +83,7 @@ const instruction* op_jumpi(const instruction* instr, execution_state& state) no
 
 const instruction* op_beginsub(const instruction*, execution_state& state) noexcept
 {
-    return state.exit(EVMC_OUT_OF_GAS);
+    return state.exit(EVMC_INVALID_INSTRUCTION);
 }
 
 const instruction* op_jumpsub(const instruction* instr, execution_state& state) noexcept
