@@ -7,6 +7,9 @@ include(LibraryTools)
 hunter_add_package(intx)
 find_package(intx CONFIG REQUIRED)
 
+hunter_add_package(abseil)
+find_package(absl CONFIG REQUIRED)
+
 add_library(evmone
     ${include_dir}/evmone/evmone.h
     analysis.cpp
@@ -23,7 +26,7 @@ add_library(evmone
     limits.hpp
     opcodes_helpers.h
 )
-target_link_libraries(evmone PUBLIC evmc::evmc PRIVATE intx::intx evmc::instructions ethash::keccak)
+target_link_libraries(evmone PUBLIC evmc::evmc PRIVATE intx::intx evmc::instructions ethash::keccak absl::flat_hash_map)
 target_include_directories(evmone PUBLIC
     $<BUILD_INTERFACE:${include_dir}>$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )

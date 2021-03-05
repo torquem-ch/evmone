@@ -31,10 +31,10 @@ void dump(const evmone::code_analysis& analysis)
             block = &instr.arg.block;
 
             const auto get_jumpdest_offset = [&analysis](size_t index) noexcept {
-                for (size_t t = 0; t < analysis.jumpdest_targets.size(); ++t)
+                if (auto it = analysis.jumpdest.find(static_cast<int32_t>(index));
+                    it != analysis.jumpdest.end())
                 {
-                    if (static_cast<size_t>(analysis.jumpdest_targets[t]) == index)
-                        return analysis.jumpdest_offsets[t];
+                    return it->second;
                 }
                 return int32_t{-1};
             };

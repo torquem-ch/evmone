@@ -5,6 +5,7 @@
 
 #include "execution_state.hpp"
 #include "limits.hpp"
+#include <absl/container/flat_hash_map.h>
 #include <evmc/evmc.hpp>
 #include <evmc/instructions.h>
 #include <evmc/utils.h>
@@ -132,25 +133,18 @@ struct code_analysis
     /// Storage for large push values.
     std::vector<intx::uint256> push_values;
 
-    /// The offsets of JUMPDESTs in the original code.
-    /// These are values that JUMP/JUMPI receives as an argument.
-    /// The elements are sorted.
-    std::vector<int32_t> jumpdest_offsets;
-
-    /// The indexes of the instructions in the generated instruction table
-    /// matching the elements from jumdest_offsets.
-    /// This is value to which the next instruction pointer must be set in JUMP/JUMPI.
-    std::vector<int32_t> jumpdest_targets;
+    /// Keys are the offsets of JUMPDESTs in the original code.
+    /// They are what JUMP/JUMPI receives as an argument.
+    ///
+    /// Values are the indexes of the instructions in the generated instruction table
+    /// that match the offsets.
+    absl::flat_hash_map<int32_t, int32_t> jumpdest;
 };
 
 inline int find_jumpdest(const code_analysis& analysis, int offset) noexcept
 {
-    const auto begin = std::begin(analysis.jumpdest_offsets);
-    const auto end = std::end(analysis.jumpdest_offsets);
-    const auto it = std::lower_bound(begin, end, offset);
-    return (it != end && *it == offset) ?
-               analysis.jumpdest_targets[static_cast<size_t>(it - begin)] :
-               -1;
+    const auto it = analysis.jumpdest.find(offset);
+    return it == analysis.jumpdest.end() ? -1 : it->second;
 }
 
 EVMC_EXPORT code_analysis analyze(
